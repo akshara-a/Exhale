@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Compass, 
   Eye, 
@@ -9,42 +9,69 @@ import {
   Lock, 
   AlertTriangle, 
   CheckCircle2, 
-  RotateCcw, 
   Sparkles, 
   Flame, 
   ArrowRight, 
+  ArrowLeft,
   Headphones, 
   Vibrate, 
   Footprints, 
   Camera, 
-  Copy, 
-  Download, 
   CloudSun, 
   ChevronDown, 
   ChevronUp, 
-  Terminal, 
   Activity, 
   Trees, 
   Check, 
-  Share2, 
-  FileImage, 
   WifiOff, 
   BookOpen, 
-  X,
   ChevronRight,
-  Layers
+  Layers,
+  HelpCircle,
+  Mic,
+  MicOff,
+  RefreshCw,
+  Heart,
+  Smile,
+  Play,
+  Pause,
+  Trash2,
+  ShieldCheck,
+  Sun
 } from 'lucide-react';
+
 import { AppState, GroundingMission, GroundingStep, WeatherTelemetry, ProofOfTouchResponse } from './types';
 import { soundscape } from './audio';
 import { generateOfflineMission } from './offlineEngine';
 import { generateReceiptImage } from './receiptCanvas';
 import { CULTURAL_TAXONOMY, CulturalTradition } from './culturalLore';
 
-// Example acute somatic expressions for instant evaluation
-const PRESETS = [
-  "Staring at unresolved bugs for hours; my chest is constricted and my eyes burn from the monitor.",
-  "Drowning in Slack pings, sprint pressure, and cognitive noise; my nervous system is buzzing with panic.",
-  "Paralyzed by an impending deadline, shallow breathing, and mental static that won't quiet down.",
+import { StepProgress } from './components/StepProgress';
+import { HowItWorksModal } from './components/HowItWorksModal';
+import { TraditionsModal } from './components/TraditionsModal';
+import { LoreDetailModal } from './components/LoreDetailModal';
+import { EmergencyExitModal } from './components/EmergencyExitModal';
+import { ReceiptCard } from './components/ReceiptCard';
+import { WeatherPopover } from './components/WeatherPopover';
+import { ToastContainer, ToastMessage } from './components/Toast';
+
+// Ergonomic Acute State Scenario Presets
+const SCENARIOS = [
+  {
+    icon: '🐛',
+    title: 'Compiler & Bug Burnout',
+    text: "Staring at unresolved bugs for hours; my chest is constricted and my eyes burn from the monitor.",
+  },
+  {
+    icon: '💬',
+    title: 'Slack & Notification Chaos',
+    text: "Drowning in Slack pings, sprint pressure, and cognitive noise; my nervous system is buzzing with panic.",
+  },
+  {
+    icon: '⏳',
+    title: 'Deadline Paralysis',
+    text: "Paralyzed by an impending deadline, shallow breathing, and mental static that won't quiet down.",
+  },
 ];
 
 const TOP_CULTURAL_PILLS = [
@@ -68,6 +95,7 @@ export default function App() {
 
   // Hyper-local Weather Telemetry
   const [weatherTelemetry, setWeatherTelemetry] = useState<WeatherTelemetry | null>(null);
+  const [showWeatherPopover, setShowWeatherPopover] = useState(false);
 
   // Screen Lock & Timer State
   const [demoFastMode, setDemoFastMode] = useState(false);
@@ -76,23 +104,23 @@ export default function App() {
   
   // Page Visibility & Tab Switch Penalty
   const [tabSwitches, setTabSwitches] = useState(0);
-  const [showPenaltyToast, setShowPenaltyToast] = useState(false);
-  const [penaltyMessage, setPenaltyMessage] = useState('');
 
   // Audio & Soundscape State
   const [ambientSoundActive, setAmbientSoundActive] = useState(false);
   const [pocketModeActive, setPocketModeActive] = useState(false);
 
-  // Pocket Haptics (Box Breathing: 4-4-4-4)
-  const [hapticsEnabled, setHapticsEnabled] = useState(false);
+  // Box Breathing Pacer (4-4-4-4)
   const [breathPhase, setBreathPhase] = useState<'Inhale' | 'Hold' | 'Exhale' | 'HoldEmpty'>('Inhale');
   const [breathCountdown, setBreathCountdown] = useState(4);
+  const [hapticsEnabled, setHapticsEnabled] = useState(false);
+  const [showBreathingVisualizer, setShowBreathingVisualizer] = useState(true);
 
   // Motion & Step-Pacing Verification
   const [stepCount, setStepCount] = useState(0);
 
   // Multimodal Proof of Touch
   const [proofOfTouch, setProofOfTouch] = useState<ProofOfTouchResponse | null>(null);
+  const [touchImagePreview, setTouchImagePreview] = useState<string | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -106,12 +134,36 @@ export default function App() {
   const [copiedReceipt, setCopiedReceipt] = useState(false);
   const [isGeneratingPng, setIsGeneratingPng] = useState(false);
   
-  // Modals
+  // User Experience Enhancements
+  const [reviewedSteps, setReviewedSteps] = useState<Set<number>>(new Set());
+  const [isSpeakingSteps, setIsSpeakingSteps] = useState(false);
+  const [somaticReflection, setSomaticReflection] = useState<string | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+
+  // Modals & Navigation
   const [activeLoreModal, setActiveLoreModal] = useState<CulturalTradition | null>(null);
   const [showTraditionsSelectorModal, setShowTraditionsSelectorModal] = useState(false);
+  const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
+  const [showEmergencyExitModal, setShowEmergencyExitModal] = useState(false);
+
+  // Toast System
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = useCallback((message: string, type: 'success' | 'warning' | 'info' = 'success', title?: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setToasts((prev) => [...prev, { id, message, type, title }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  }, []);
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const breathTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Cooperative Cancellation Handler (Abort Signal)
@@ -121,6 +173,7 @@ export default function App() {
       abortControllerRef.current = null;
     }
     setIsLoading(false);
+    addToast("Generation cancelled cooperatively.", "info");
   };
 
   // Resolve API Base URL
@@ -164,6 +217,66 @@ export default function App() {
     }
   }, []);
 
+  // Voice Dictation (Speech-to-Text)
+  const toggleVoiceRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addToast("Speech recognition is not supported in this browser. Try Chrome, Edge, or Safari.", "info", "Microphone");
+      return;
+    }
+
+    if (isRecordingVoice) {
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.stop();
+      }
+      setIsRecordingVoice(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecordingVoice(true);
+        addToast("Listening... speak your acute feelings freely.", "info", "Dictation Active");
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setBrainDump((prev) => {
+            const separator = prev.trim() ? ' ' : '';
+            return prev + separator + transcript;
+          });
+        }
+      };
+
+      recognition.onerror = (err: any) => {
+        console.warn("Dictation error:", err);
+        setIsRecordingVoice(false);
+        if (err.error !== 'no-speech') {
+          addToast("Microphone error: " + (err.error || "Please allow access"), "warning", "Dictation");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecordingVoice(false);
+      };
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.warn("Could not start speech recognition:", err);
+      setIsRecordingVoice(false);
+    }
+  };
+
   // Submit Brain Dump (With Trail-Ready Offline Resilience)
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -174,6 +287,7 @@ export default function App() {
 
     setIsLoading(true);
     setErrorMsg(null);
+    setReviewedSteps(new Set());
 
     // If completely offline, use on-device Trail generator
     if (!navigator.onLine) {
@@ -186,6 +300,7 @@ export default function App() {
       setMission(offlineMission);
       setAppState('MISSION');
       setIsLoading(false);
+      addToast("Offline Trail-Ready generator engaged.", "info", "No Internet Connection");
       return;
     }
 
@@ -233,6 +348,7 @@ export default function App() {
       );
       setMission(offlineMission);
       setAppState('MISSION');
+      addToast("Connected to on-device zero-latency generator.", "info", "Sovereign Mode");
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
@@ -294,14 +410,10 @@ export default function App() {
       const resetDuration = demoFastMode ? 10 : 600;
       setTimeLeft(resetDuration);
       setTabSwitches((prev) => prev + 1);
-      setPenaltyMessage(`${reason} Timer reset to ${demoFastMode ? '10 seconds' : '10:00'}.`);
-      setShowPenaltyToast(true);
+      const msg = `${reason} Timer reset to ${demoFastMode ? '10 seconds' : '10:00'}.`;
+      addToast(msg, "warning", "Circuit Breaker Triggered");
 
       soundscape.playBowlChime(220, 1.2);
-
-      setTimeout(() => {
-        setShowPenaltyToast(false);
-      }, 4500);
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -311,7 +423,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [appState, timerExpired, demoFastMode]);
+  }, [appState, timerExpired, demoFastMode, addToast]);
 
   // Motion & Step-Pacing Verification Hook
   useEffect(() => {
@@ -346,7 +458,10 @@ export default function App() {
 
   // Pocket Mode (Audio-First Narration via Web Speech API)
   const startAudioNarration = () => {
-    if (!('speechSynthesis' in window) || !mission) return;
+    if (!('speechSynthesis' in window) || !mission) {
+      addToast("Speech synthesis not supported in this browser.", "info");
+      return;
+    }
     window.speechSynthesis.cancel();
     setPocketModeActive(true);
 
@@ -373,9 +488,34 @@ export default function App() {
     setPocketModeActive(false);
   };
 
-  // Pocket Haptics (Box Breathing: 4s Inhale, 4s Hold, 4s Exhale, 4s Hold)
+  // Preview Voice Reading of Steps in Mission Screen
+  const toggleMissionStepsReading = () => {
+    if (!('speechSynthesis' in window) || !mission) return;
+
+    if (isSpeakingSteps) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingSteps(false);
+      return;
+    }
+
+    setIsSpeakingSteps(true);
+    window.speechSynthesis.cancel();
+
+    const fullText = `Your grounding mission: ${mission.mission_title}. ` +
+      mission.steps.map(s => `Step ${s.step_number}, focusing on ${s.sensory_focus}. ${s.physical_action}`).join('. ');
+
+    const utterance = new SpeechSynthesisUtterance(fullText);
+    utterance.rate = 0.88;
+    utterance.pitch = 0.95;
+    utterance.onend = () => setIsSpeakingSteps(false);
+    utterance.onerror = () => setIsSpeakingSteps(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Box Breathing Pacer (Box Breathing: 4s Inhale, 4s Hold, 4s Exhale, 4s HoldEmpty)
   useEffect(() => {
-    if (!hapticsEnabled || appState !== 'LOCK' || timerExpired) {
+    if (appState !== 'LOCK' || timerExpired) {
       if (breathTimerRef.current) clearInterval(breathTimerRef.current);
       return;
     }
@@ -383,12 +523,12 @@ export default function App() {
     let phaseIndex = 0;
     const phases: Array<'Inhale' | 'Hold' | 'Exhale' | 'HoldEmpty'> = ['Inhale', 'Hold', 'Exhale', 'HoldEmpty'];
 
-    const triggerHapticPulse = () => {
+    const triggerBreathPulse = () => {
       const curPhase = phases[phaseIndex % 4];
       setBreathPhase(curPhase);
       setBreathCountdown(4);
       
-      if ('vibrate' in navigator) {
+      if (hapticsEnabled && 'vibrate' in navigator) {
         if (curPhase === 'Inhale' || curPhase === 'Exhale') {
           navigator.vibrate([150, 100, 150]);
         } else {
@@ -398,8 +538,8 @@ export default function App() {
       phaseIndex++;
     };
 
-    triggerHapticPulse();
-    breathTimerRef.current = setInterval(triggerHapticPulse, 4000);
+    triggerBreathPulse();
+    breathTimerRef.current = setInterval(triggerBreathPulse, 4000);
 
     const countdownInterval = setInterval(() => {
       setBreathCountdown((prev) => (prev > 1 ? prev - 1 : 4));
@@ -409,7 +549,7 @@ export default function App() {
       if (breathTimerRef.current) clearInterval(breathTimerRef.current);
       clearInterval(countdownInterval);
     };
-  }, [hapticsEnabled, appState, timerExpired]);
+  }, [appState, timerExpired, hapticsEnabled]);
 
   // Multimodal Proof of Touch Upload Handler
   const handleProofOfTouchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -418,6 +558,7 @@ export default function App() {
 
     setIsUploadingProof(true);
     setErrorMsg(null);
+    setTouchImagePreview(URL.createObjectURL(file));
 
     try {
       const baseUrl = getApiUrl();
@@ -438,10 +579,13 @@ export default function App() {
       setProofOfTouch(result);
       if (result.verified) {
         soundscape.playBowlChime(528, 2.0);
+        addToast(`Verified touch: ${result.detected_element}`, "success", "Nature Contact Confirmed");
+      } else {
+        addToast(result.message, "warning", "Verification Rejected");
       }
     } catch (err: any) {
       console.error('Proof of touch failed:', err);
-      setErrorMsg(err.message || 'Failed to analyze touch photograph');
+      addToast(err.message || 'Failed to analyze photograph', "warning", "Verification Service");
     } finally {
       setIsUploadingProof(false);
     }
@@ -450,6 +594,7 @@ export default function App() {
   // Fast Evaluator Synthetic Test Sample Loader
   const loadTestSample = async (sampleType: 'leaf' | 'bark' | 'screen') => {
     setIsUploadingProof(true);
+    setTouchImagePreview(null);
     try {
       const baseUrl = getApiUrl();
       const res = await fetch(`${baseUrl}/verify-touch/sample?sample_type=${sampleType}`);
@@ -458,12 +603,15 @@ export default function App() {
         setProofOfTouch(result);
         if (result.verified) {
           soundscape.playBowlChime(528, 2.0);
+          addToast(`Sample verified: ${result.detected_element}`, "success", "Evaluator Fixture");
         } else {
           soundscape.playBowlChime(220, 1.0);
+          addToast(result.message, "warning", "Screen Rejection Tested");
         }
       }
     } catch (e) {
       console.warn("Failed fetching sample:", e);
+      addToast("Could not load test fixture from backend.", "warning");
     } finally {
       setIsUploadingProof(false);
     }
@@ -474,9 +622,11 @@ export default function App() {
     if (ambientSoundActive) {
       soundscape.stopAmbientSoundscape();
       setAmbientSoundActive(false);
+      addToast("Ambient drone muted.", "info");
     } else {
       soundscape.startAmbientSoundscape();
       setAmbientSoundActive(true);
+      addToast("Synthesizing 432Hz solfeggio drone & canopy breeze.", "success", "Soundscape Active");
     }
   };
 
@@ -538,6 +688,7 @@ ${quote}`;
   const copyReceiptToClipboard = () => {
     navigator.clipboard.writeText(generateReceiptText());
     setCopiedReceipt(true);
+    addToast("Ephemeral field receipt copied to clipboard.", "success");
     setTimeout(() => setCopiedReceipt(false), 3000);
   };
 
@@ -549,6 +700,7 @@ ${quote}`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    addToast("Receipt saved as .txt file.", "success");
   };
 
   // Render & Download High-Res PNG Receipt Card
@@ -560,8 +712,10 @@ ${quote}`;
       link.download = `exhale-field-log-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
+      addToast("High-resolution verification card downloaded.", "success");
     } catch (e) {
       console.warn("Failed generating PNG:", e);
+      addToast("Failed to render PNG receipt.", "warning");
     } finally {
       setIsGeneratingPng(false);
     }
@@ -583,6 +737,25 @@ ${quote}`;
     }
   };
 
+  // Copy Mission Steps to Clipboard
+  const copyMissionSteps = () => {
+    if (!mission) return;
+    const text = `${mission.mission_title}\n\n` +
+      mission.steps.map(s => `${s.step_number}. [${s.sensory_focus}] ${s.physical_action}`).join('\n\n');
+    navigator.clipboard.writeText(text);
+    addToast("Grounding steps copied to clipboard.", "success");
+  };
+
+  // Toggle Step Checkbox
+  const toggleStepReviewed = (stepNum: number) => {
+    setReviewedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepNum)) next.delete(stepNum);
+      else next.add(stepNum);
+      return next;
+    });
+  };
+
   // Complete Reset (Zero retention)
   const handleFullReset = () => {
     soundscape.stopAmbientSoundscape();
@@ -594,10 +767,32 @@ ${quote}`;
     setPocketModeActive(false);
     setAmbientSoundActive(false);
     setProofOfTouch(null);
+    setTouchImagePreview(null);
     setStepCount(0);
     setTabSwitches(0);
+    setReviewedSteps(new Set());
+    setSomaticReflection(null);
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    addToast("Volatile memory dissolved. Zero bytes persisted.", "info", "Clean Slate");
   };
+
+  // Emergency Exit Confirm
+  const handleConfirmEmergencyExit = () => {
+    setShowEmergencyExitModal(false);
+    setAppState('MISSION');
+    if (timerRef.current) clearInterval(timerRef.current);
+    soundscape.stopAmbientSoundscape();
+    addToast("Returned to protocol view early.", "info");
+  };
+
+  // Active Tradition Lore lookup
+  const currentTraditionLore = CULTURAL_TAXONOMY.find(
+    (t) => t.id === culturalChoice || (culturalChoice !== 'Auto-Detect' && t.name.toLowerCase().includes(culturalChoice.toLowerCase().split(' ')[0]))
+  );
+
+  // Total seconds for circle progress calculation
+  const totalDuration = demoFastMode ? 10 : 600;
+  const timerProgressPct = Math.max(0, Math.min(100, ((totalDuration - timeLeft) / totalDuration) * 100));
 
   // ==============================================================
   // POCKET MODE BLACKOUT RENDER
@@ -612,8 +807,8 @@ ${quote}`;
           POCKET MODE ACTIVE // OLED POWER-SAVER BLACKOUT
         </div>
         <div className="space-y-4">
-          <Headphones className="w-12 h-12 text-emerald-950 mx-auto animate-pulse" />
-          <p className="font-mono text-neutral-800 text-sm">
+          <Headphones className="w-14 h-14 text-emerald-950 mx-auto animate-pulse" />
+          <p className="font-mono text-neutral-800 text-sm max-w-sm mx-auto leading-relaxed">
             Audio guidance streaming into your earbuds...<br />
             Keep your hands in your pockets and your feet upon the living earth.
           </p>
@@ -625,21 +820,20 @@ ${quote}`;
     );
   }
 
-  // Active Tradition Lore lookup
-  const currentTraditionLore = CULTURAL_TAXONOMY.find(
-    (t) => t.id === culturalChoice || (culturalChoice !== 'Auto-Detect' && t.name.toLowerCase().includes(culturalChoice.toLowerCase().split(' ')[0]))
-  );
-
   return (
     <div className="min-h-screen bg-[#08090d] text-[#f1f5f9] font-sans flex flex-col justify-between relative selection:bg-emerald-500 selection:text-black">
       {/* Ambient background glow */}
-      <div className="fixed inset-0 ambient-glow"></div>
+      <div className="fixed inset-0 ambient-glow" />
+
+      {/* Global Toast Notification Stack */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Global Minimalist Top Nav Bar */}
-      <header className="border-b border-white/[0.06] bg-[#08090d]/80 backdrop-blur-xl px-4 sm:px-8 py-3.5 sm:py-4 flex items-center justify-between z-20 sticky top-0 transition-all">
+      <header className="border-b border-white/[0.06] bg-[#08090d]/85 backdrop-blur-xl px-4 sm:px-8 py-3.5 sm:py-4 flex items-center justify-between z-20 sticky top-0 transition-all">
+        {/* Brand & Status */}
         <div className="flex items-center space-x-3">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-          <span className="font-mono text-xs sm:text-sm tracking-[0.25em] font-semibold text-neutral-100 uppercase">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm glow-emerald" />
+          <span className="font-mono text-sm sm:text-base tracking-[0.25em] font-semibold text-neutral-100 uppercase">
             EXHALE
           </span>
           <span className="hidden sm:inline text-[10px] font-mono tracking-widest text-neutral-500 uppercase">
@@ -653,63 +847,82 @@ ${quote}`;
           )}
         </div>
 
+        {/* Global Controls & Tools */}
         <div className="flex items-center space-x-2 sm:space-x-3 text-xs font-mono">
+          {/* How It Works Guide Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowHowItWorksModal(true)}
+            className="px-2.5 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.06] text-neutral-300 hover:text-white transition flex items-center space-x-1.5"
+            title="How Exhale works & privacy details"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden md:inline">How It Works</span>
+          </button>
+
           {/* Ambient Soundscape Toggle */}
           <button
+            type="button"
             onClick={toggleAmbientSound}
             className={`px-3 py-1.5 rounded-full border text-[11px] transition flex items-center space-x-1.5 ${
               ambientSoundActive 
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' 
+                ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 glow-emerald-subtle' 
                 : 'bg-white/[0.03] border-white/[0.08] text-neutral-400 hover:text-white'
             }`}
-            title="Toggle synthesized 432Hz vagus nerve calming soundscape"
+            title="Toggle synthesized 432Hz solfeggio drone and canopy wind"
           >
-            {ambientSoundActive ? <Volume2 className="w-3 h-3 text-emerald-400" /> : <VolumeX className="w-3 h-3 text-neutral-500" />}
-            <span className="hidden md:inline">{ambientSoundActive ? '432Hz SOUNDSCAPE' : '432Hz DRONE'}</span>
+            {ambientSoundActive ? <Volume2 className="w-3 h-3 text-emerald-400 animate-pulse" /> : <VolumeX className="w-3 h-3 text-neutral-500" />}
+            <span className="hidden md:inline">{ambientSoundActive ? '432Hz PLAYING' : '432Hz SOUND'}</span>
           </button>
 
-          {/* Live Weather Telemetry Badge */}
+          {/* Live Weather Telemetry Pill */}
           {weatherTelemetry && (
-            <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] text-neutral-300 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setShowWeatherPopover(!showWeatherPopover)}
+              className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] text-neutral-300 text-[11px] transition"
+              title="Click to inspect local atmospheric anchoring"
+            >
               <CloudSun className="w-3 h-3 text-amber-400" />
               <span>{weatherTelemetry.temperature_c.toFixed(0)}°C</span>
               <span className="hidden lg:inline text-neutral-500">• {weatherTelemetry.condition}</span>
-            </div>
+            </button>
           )}
 
-          {/* Testing Mode Toggle */}
+          {/* Weather Popover Card */}
+          <WeatherPopover
+            weather={weatherTelemetry}
+            isOpen={showWeatherPopover}
+            onClose={() => setShowWeatherPopover(false)}
+          />
+
+          {/* Mode Switcher: 10s Speedrun Test vs 10m Real Grounding */}
           <button
+            type="button"
             onClick={() => {
               const next = !demoFastMode;
               setDemoFastMode(next);
               if (appState === 'LOCK') {
                 setTimeLeft(next ? 10 : 600);
               }
+              addToast(
+                next 
+                  ? "⚡ Demo Speedrun Mode (10s lock) enabled for fast evaluation." 
+                  : "⏱ Standard Grounding Mode (10m lock) active.",
+                "info"
+              );
             }}
             className={`px-2.5 py-1.5 rounded-full border text-[11px] transition font-mono ${
               demoFastMode 
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' 
-                : 'bg-white/[0.03] border-white/[0.08] text-neutral-500 hover:text-neutral-300'
+                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-sm' 
+                : 'bg-white/[0.03] border-white/[0.08] text-neutral-400 hover:text-neutral-200'
             }`}
-            title="Toggle fast 10s evaluation timer"
+            title={demoFastMode ? "Switch to 10-minute real immersion" : "Switch to 10-second fast evaluation test"}
           >
-            {demoFastMode ? '⚡ 10s TEST' : '⏱ 10m REAL'}
+            {demoFastMode ? '⚡ 10s DEMO' : '⏱ 10m REAL'}
           </button>
         </div>
       </header>
-
-      {/* Penalty Warning Toast */}
-      {showPenaltyToast && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-11/12 max-w-md bg-red-950/90 border border-red-500/60 text-red-200 px-5 py-3.5 rounded-2xl shadow-2xl backdrop-blur-xl flex items-start space-x-3 glow-red animate-bounce">
-          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-mono font-bold text-xs text-red-300 uppercase tracking-wide">
-              CIRCUIT BREAKER PENALTY TRIGGERED
-            </p>
-            <p className="text-xs mt-0.5 text-red-100 font-sans">{penaltyMessage}</p>
-          </div>
-        </div>
-      )}
 
       {/* Hidden File Input for Multimodal Proof of Touch */}
       <input
@@ -721,38 +934,62 @@ ${quote}`;
         className="hidden"
       />
 
+      {/* 4-Stage Protocol Progress Tracker */}
+      <div className="pt-4 pb-2 z-10">
+        <StepProgress 
+          currentStage={appState} 
+          onNavigateToInput={appState === 'MISSION' ? () => setAppState('INPUT') : undefined} 
+        />
+      </div>
+
       {/* Main Interactive Stage */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-14 flex flex-col justify-center z-10">
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col justify-center z-10">
         
         {/* ============================================================== */}
-        {/* STATE 1: INPUT (MINIMALIST & CLASSY CLEAN) */}
+        {/* STATE 1: INPUT (USER FRIENDLY, CLEAN & CLASSY) */}
         {/* ============================================================== */}
         {appState === 'INPUT' && (
-          <div className="space-y-10 animate-fade-in">
+          <div className="space-y-8 sm:space-y-10 animate-fade-in">
             {/* Minimalist Editorial Headline */}
             <div className="space-y-4">
               <div className="inline-flex items-center space-x-2 font-mono text-[11px] px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
-                <Flame className="w-3 h-3" />
-                <span>HACKTOBERFEST // "TOUCH GRASS" & BEST USE OF RENDER</span>
+                <Flame className="w-3 h-3 text-emerald-400" />
+                <span>EPHEMERAL AUTONOMIC CIRCUIT BREAKER</span>
               </div>
               <h1 className="text-3xl sm:text-5xl md:text-6xl font-light tracking-tight text-white leading-[1.15]">
                 Step away from the screen.<br />
                 <span className="font-serif italic text-emerald-300 font-normal">Return to the living earth.</span>
               </h1>
               <p className="text-neutral-400 text-sm sm:text-base max-w-xl font-normal leading-relaxed">
-                Digital feeds and compiler loops trap the nervous system in artificial vigilance. 
-                Exhale is a zero-retention emotional circuit breaker. Speak your acute burden below to generate 
-                a 5-step sensory grounding protocol and step into the open air.
+                When cognitive noise and debugging strain lock your nervous system into artificial vigilance, 
+                Exhale generates a customized 5-step sensory nature mission and silences your display.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Brain Dump Input Area */}
               <div className="space-y-2">
-                <label className="block font-mono text-xs uppercase tracking-wider text-neutral-400">
-                  Where does the burden sit right now? (Acute state):
-                </label>
-                <div className="glass-panel rounded-2xl p-4 sm:p-5 transition-all duration-300 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/20">
+                <div className="flex items-center justify-between">
+                  <label className="block font-mono text-xs uppercase tracking-wider text-neutral-300">
+                    Where does the burden sit right now? (Acute state):
+                  </label>
+                  {/* Voice Dictation Button */}
+                  <button
+                    type="button"
+                    onClick={toggleVoiceRecording}
+                    className={`text-[11px] font-mono px-2.5 py-1 rounded-lg border transition flex items-center space-x-1.5 ${
+                      isRecordingVoice
+                        ? 'bg-red-500/20 border-red-500/50 text-red-300 animate-pulse'
+                        : 'bg-white/[0.02] border-white/[0.08] text-neutral-400 hover:text-emerald-300 hover:border-emerald-500/40'
+                    }`}
+                    title="Speak your thoughts aloud using microphone"
+                  >
+                    {isRecordingVoice ? <MicOff className="w-3 h-3 text-red-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
+                    <span>{isRecordingVoice ? 'Listening...' : 'Voice Dictate'}</span>
+                  </button>
+                </div>
+
+                <div className="glass-panel rounded-2xl p-4 sm:p-5 transition-all duration-300 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/20 relative">
                   <textarea
                     rows={4}
                     value={brainDump}
@@ -761,19 +998,68 @@ ${quote}`;
                     className="w-full bg-transparent text-base sm:text-lg font-mono text-white placeholder-neutral-600 outline-none resize-none leading-relaxed"
                     disabled={isLoading}
                   />
+
+                  {/* Textarea Bottom Toolbar */}
                   <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] text-[11px] font-mono text-neutral-500">
-                    <span>Zero bytes logged. In-memory only.</span>
-                    <span>{brainDump.length} chars</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      <span>Zero bytes stored • Volatile memory only</span>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      {brainDump.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setBrainDump('')}
+                          className="text-neutral-400 hover:text-red-400 transition flex items-center space-x-1"
+                          title="Clear input"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Clear</span>
+                        </button>
+                      )}
+                      <span className={brainDump.length >= 2 ? 'text-neutral-400' : 'text-neutral-600'}>
+                        {brainDump.length} chars
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Minimalist Cultural Lineage Selector Bar */}
+              {/* Categorized Scenario Presets */}
               <div className="space-y-2.5">
+                <p className="text-xs font-mono text-neutral-400 uppercase tracking-wider">
+                  Or load acute state scenario:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {SCENARIOS.map((scenario, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setBrainDump(scenario.text);
+                        addToast(`Loaded "${scenario.title}" scenario.`, "info");
+                      }}
+                      className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-emerald-500/40 hover:bg-white/[0.04] text-left transition group"
+                    >
+                      <div className="flex items-center space-x-2 text-xs font-mono text-emerald-400 group-hover:text-emerald-300">
+                        <span>{scenario.icon}</span>
+                        <span className="font-semibold">{scenario.title}</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 font-sans mt-1 line-clamp-2">
+                        "{scenario.text}"
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Minimalist Cultural Lineage Selector Bar */}
+              <div className="space-y-2.5 pt-1">
                 <div className="flex items-center justify-between">
-                  <label className="font-mono text-xs uppercase tracking-wider text-neutral-400 flex items-center space-x-1.5">
+                  <label className="font-mono text-xs uppercase tracking-wider text-neutral-300 flex items-center space-x-1.5">
                     <Trees className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Cultural Grounding Lineage:</span>
+                    <span>Ancestral Nature Lineage:</span>
                   </label>
                   <button
                     type="button"
@@ -785,7 +1071,7 @@ ${quote}`;
                   </button>
                 </div>
 
-                {/* Horizontal Minimalist Quick Pills */}
+                {/* Horizontal Quick Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-mono">
                   {TOP_CULTURAL_PILLS.map((pill) => (
                     <button
@@ -794,7 +1080,7 @@ ${quote}`;
                       onClick={() => setCulturalChoice(pill.id)}
                       className={`px-3 py-1.5 rounded-full border whitespace-nowrap transition flex items-center space-x-1.5 flex-shrink-0 ${
                         culturalChoice === pill.id
-                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-sm'
                           : 'bg-white/[0.03] border-white/[0.06] text-neutral-400 hover:text-neutral-200 hover:border-white/[0.12]'
                       }`}
                     >
@@ -814,10 +1100,10 @@ ${quote}`;
 
                 {/* Active Framework Summary Strip */}
                 {culturalChoice !== 'Auto-Detect' && currentTraditionLore && (
-                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-xs font-mono text-neutral-400">
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-xs font-mono text-neutral-300">
                     <div className="flex items-center space-x-2 truncate">
                       <span className="text-emerald-400 font-serif italic text-sm">{currentTraditionLore.nativeScript}</span>
-                      <span className="text-neutral-300 truncate">{currentTraditionLore.name}</span>
+                      <span className="text-white truncate font-medium">{currentTraditionLore.name}</span>
                     </div>
                     <button
                       type="button"
@@ -831,25 +1117,6 @@ ${quote}`;
                 )}
               </div>
 
-              {/* Preset Scenarios as Discreet Whispers */}
-              <div className="space-y-2">
-                <p className="text-xs font-mono text-neutral-500 uppercase tracking-wider">
-                  Or load acute state scenario:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {PRESETS.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setBrainDump(preset)}
-                      className="text-xs font-sans px-3 py-1.5 rounded-xl bg-white/[0.02] border border-white/[0.06] text-neutral-400 hover:text-emerald-300 hover:border-emerald-500/30 transition text-left truncate max-w-full"
-                    >
-                      "{preset.slice(0, 52)}..."
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {errorMsg && (
                 <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs font-mono flex items-center space-x-2.5">
                   <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -861,11 +1128,11 @@ ${quote}`;
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 sm:py-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-sm sm:text-base uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 sm:py-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-sm sm:text-base uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
               >
                 {isLoading ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
                     <span>CALIBRATING GROUNDING PROTOCOL...</span>
                   </>
                 ) : (
@@ -893,21 +1160,61 @@ ${quote}`;
             {/* Zero Retention Proof Card */}
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 border-t border-white/[0.04] gap-2">
               <div className="flex items-center space-x-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>Zero-Retention Contract: Volatile RAM only. 0 bytes persisted.</span>
               </div>
-              <span className="text-neutral-400">Zero-Retention • Sovereign Open-Weight Runtime</span>
+              <span className="text-neutral-400">Sovereign Open-Weight Runtime</span>
             </div>
           </div>
         )}
 
         {/* ============================================================== */}
-        {/* STATE 2: THE MISSION (CLEAN & CLASSY) */}
+        {/* STATE 2: THE MISSION (CLEAN, INTERACTIVE & EDITABLE) */}
         {/* ============================================================== */}
         {appState === 'MISSION' && mission && (
-          <div className="space-y-8 animate-fade-in">
+          <div className="space-y-7 animate-fade-in">
+            {/* Top Navigation Bar: Back & Tools */}
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setAppState('INPUT')}
+                className="text-xs font-mono text-neutral-400 hover:text-white transition flex items-center space-x-1.5 py-1 px-2.5 rounded-lg hover:bg-white/[0.04]"
+                title="Return to input to refine your description or change lineage"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Edit Input & Lineage</span>
+              </button>
+
+              <div className="flex items-center space-x-2 font-mono text-xs">
+                {/* Text-to-Speech Preview */}
+                <button
+                  type="button"
+                  onClick={toggleMissionStepsReading}
+                  className={`px-3 py-1.5 rounded-full border transition flex items-center space-x-1.5 ${
+                    isSpeakingSteps
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                      : 'bg-white/[0.03] border-white/[0.08] text-neutral-400 hover:text-white'
+                  }`}
+                  title="Listen to steps read aloud"
+                >
+                  {isSpeakingSteps ? <Pause className="w-3 h-3 text-emerald-400" /> : <Play className="w-3 h-3 text-emerald-400" />}
+                  <span>{isSpeakingSteps ? 'Stop Audio' : 'Listen to Steps'}</span>
+                </button>
+
+                {/* Copy Steps */}
+                <button
+                  type="button"
+                  onClick={copyMissionSteps}
+                  className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] text-neutral-400 hover:text-white transition"
+                  title="Copy steps to clipboard"
+                >
+                  Copy Steps
+                </button>
+              </div>
+            </div>
+
             {/* Mission Header */}
-            <div className="space-y-3 border-b border-white/[0.08] pb-6">
+            <div className="space-y-3 border-b border-white/[0.08] pb-5">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="inline-flex items-center space-x-1.5 font-mono text-[11px] px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   <Sparkles className="w-3 h-3" />
@@ -929,7 +1236,7 @@ ${quote}`;
                     className="font-mono text-xs px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] hover:border-emerald-500/40 text-neutral-300 hover:text-white flex items-center space-x-1.5 transition"
                     title="Inspect historical provenance & clinical proof"
                   >
-                    <span className="truncate max-w-[220px]">{mission.cultural_framework}</span>
+                    <span className="truncate max-w-[200px]">{mission.cultural_framework}</span>
                     <BookOpen className="w-3 h-3 text-emerald-400" />
                   </button>
                   {mission.ephemeral_purge_hash && (
@@ -940,57 +1247,86 @@ ${quote}`;
                 </div>
               </div>
 
-              <h2 className="text-2xl sm:text-4xl font-light tracking-tight text-white">
+              <h2 className="text-2xl sm:text-4xl font-light tracking-tight text-white font-sans">
                 {mission.mission_title}
               </h2>
               {mission.weather_context && (
-                <p className="text-xs font-mono text-neutral-400">
-                  Atmospheric Anchoring: {mission.weather_context}
+                <p className="text-xs font-mono text-neutral-400 flex items-center space-x-1.5">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Atmospheric Anchoring: {mission.weather_context}</span>
                 </p>
               )}
             </div>
 
+            {/* Preparation checklist status */}
+            <div className="flex items-center justify-between text-xs font-mono text-neutral-400 px-1">
+              <span>5 Sensory Actions for the Open Air:</span>
+              <span className="text-emerald-400">
+                {reviewedSteps.size > 0 ? `${reviewedSteps.size} of ${mission.steps.length} readied` : 'Review each step'}
+              </span>
+            </div>
+
             {/* Steps Container */}
             <div className="space-y-3.5">
-              {mission.steps.map((step: GroundingStep) => (
-                <div
-                  key={step.step_number}
-                  className="glass-panel p-5 sm:p-6 rounded-2xl hover:border-emerald-500/30 transition flex items-start space-x-4 sm:space-x-5"
-                >
-                  <div className="font-mono text-xl sm:text-2xl font-light text-emerald-400 flex-shrink-0 w-8">
-                    0{step.step_number}
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center space-x-1.5">
-                      {getSensoryIcon(step.sensory_focus)}
-                      <span className="font-mono text-[11px] uppercase tracking-wider font-medium text-emerald-400">
-                        {step.sensory_focus}
-                      </span>
+              {mission.steps.map((step: GroundingStep) => {
+                const isChecked = reviewedSteps.has(step.step_number);
+
+                return (
+                  <div
+                    key={step.step_number}
+                    onClick={() => toggleStepReviewed(step.step_number)}
+                    className={`glass-panel p-5 sm:p-6 rounded-2xl transition-all cursor-pointer flex items-start space-x-4 sm:space-x-5 ${
+                      isChecked 
+                        ? 'border-emerald-500/40 bg-emerald-950/10' 
+                        : 'hover:border-white/[0.15]'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center flex-shrink-0 w-8 space-y-2">
+                      <div className="font-mono text-xl sm:text-2xl font-light text-emerald-400">
+                        0{step.step_number}
+                      </div>
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition ${
+                        isChecked ? 'bg-emerald-500 border-emerald-500 text-neutral-950' : 'border-white/[0.2]'
+                      }`}>
+                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
                     </div>
-                    <p className="text-sm sm:text-base font-normal text-neutral-200 leading-relaxed">
-                      {step.physical_action}
-                    </p>
+
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center space-x-1.5">
+                        {getSensoryIcon(step.sensory_focus)}
+                        <span className="font-mono text-[11px] uppercase tracking-wider font-medium text-emerald-400">
+                          {step.sensory_focus}
+                        </span>
+                      </div>
+                      <p className="text-sm sm:text-base font-normal text-neutral-200 leading-relaxed font-sans">
+                        {step.physical_action}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Lock Activation Section */}
-            <div className="pt-4 space-y-4">
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs font-mono flex items-center space-x-3">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <span>
-                  Anti-Engagement Covenant: Clicking below will silence this display for{' '}
-                  <strong className="underline text-amber-300">
-                    {demoFastMode ? '10 seconds (Speedrun)' : '10 minutes of genuine offline presence'}
-                  </strong>
-                  . If you switch tabs, the circuit resets automatically. The living earth is waiting for you.
-                </span>
+            <div className="pt-2 space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs font-mono flex items-start space-x-3">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1 leading-relaxed">
+                  <div className="font-bold text-amber-300 uppercase">Anti-Engagement Covenant</div>
+                  <div>
+                    Clicking below will silence this display for{' '}
+                    <strong className="underline text-amber-300">
+                      {demoFastMode ? '10 seconds (Speedrun Demo)' : '10 minutes of genuine offline presence'}
+                    </strong>
+                    . If you switch tabs, the circuit resets automatically. You can always exit early if needed.
+                  </div>
+                </div>
               </div>
 
               <button
                 onClick={handleGoOutside}
-                className="w-full py-5 sm:py-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base sm:text-lg uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3"
+                className="w-full py-5 sm:py-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base sm:text-lg uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 shadow-xl"
               >
                 <Lock className="w-5 h-5" />
                 <span>I AM CROSSING THE THRESHOLD // I AM GOING OUTSIDE</span>
@@ -1004,28 +1340,53 @@ ${quote}`;
         {/* ============================================================== */}
         {appState === 'LOCK' && (
           <div className="fixed inset-0 bg-[#08090d] z-50 flex flex-col items-center justify-center p-6 text-center select-none overflow-y-auto">
-            <div className="max-w-xl w-full space-y-8 animate-fade-in py-6">
+            {/* Top Bar inside Lock Screen */}
+            <div className="fixed top-5 left-5 right-5 flex items-center justify-between text-xs font-mono text-neutral-500 z-10">
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                <span className="text-neutral-400">DISCONNECTED FROM CODE</span>
+              </div>
               
+              {/* Emergency Unlock Button */}
+              <button
+                type="button"
+                onClick={() => setShowEmergencyExitModal(true)}
+                className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-400 hover:text-white border border-white/[0.08] transition"
+              >
+                ✕ Exit Session Early
+              </button>
+            </div>
+
+            <div className="max-w-xl w-full space-y-7 animate-fade-in py-10 my-auto">
               {/* Lock Badge */}
               <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-300 font-mono text-xs uppercase tracking-widest">
                 <Lock className="w-3.5 h-3.5" />
                 <span>CIRCUIT BREAKER ENGAGED // SCREEN SILENCED</span>
               </div>
 
-              {/* Massive Minimalist Countdown Clock */}
-              <div className="space-y-1">
+              {/* Massive Minimalist Countdown Clock with Progress */}
+              <div className="space-y-2 relative">
                 <div className="font-mono text-7xl sm:text-9xl font-extralight tracking-tight text-white glow-emerald">
                   {formatTime(timeLeft)}
                 </div>
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-500">
+
+                {/* Progress bar */}
+                <div className="w-48 h-1 bg-white/[0.06] rounded-full mx-auto overflow-hidden">
+                  <div 
+                    className="h-full bg-emerald-400 transition-all duration-1000"
+                    style={{ width: `${timerProgressPct}%` }}
+                  />
+                </div>
+
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-400">
                   {timerExpired ? "RECONNECTION CYCLE COMPLETE" : "TIME REMAINING IN THE LIVING WORLD"}
                 </p>
               </div>
 
-              {/* Box Breathing Visualizer Orb */}
-              {hapticsEnabled && (
+              {/* Box Breathing Visualizer Orb for All Users */}
+              {showBreathingVisualizer && (
                 <div className="flex flex-col items-center justify-center py-2 space-y-2">
-                  <div className={`w-24 h-24 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-1000 ${
+                  <div className={`w-28 h-28 rounded-full border-2 flex flex-col items-center justify-center transition-all duration-1000 ${
                     breathPhase === 'Inhale' 
                       ? 'scale-125 border-emerald-400 bg-emerald-500/10 glow-emerald' 
                       : breathPhase === 'Hold' || breathPhase === 'HoldEmpty'
@@ -1033,7 +1394,7 @@ ${quote}`;
                       : 'scale-90 border-blue-400 bg-blue-500/10'
                   }`}>
                     <span className="font-mono text-xs uppercase font-semibold text-white">{breathPhase}</span>
-                    <span className="font-mono text-xs text-emerald-300">{breathCountdown}s</span>
+                    <span className="font-mono text-sm text-emerald-300 font-bold">{breathCountdown}s</span>
                   </div>
                   <span className="font-mono text-[10px] text-purple-300 uppercase tracking-widest">
                     Vagus Nerve 4-4-4-4 Box Breathing Pacer
@@ -1042,7 +1403,7 @@ ${quote}`;
               )}
 
               {/* Directives */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <h2 className="text-2xl sm:text-3xl font-light text-white tracking-tight">
                   Screen silenced.<br />
                   <span className="font-serif italic text-emerald-300 font-normal">Touch the living world. Breathe deeply.</span>
@@ -1073,32 +1434,53 @@ ${quote}`;
                 </div>
               </div>
 
-              {/* Sensory Interaction Controls: Pocket Mode & Haptics */}
-              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+              {/* Sensory Interaction Controls: Pocket Mode, Visual Breathing & Haptics */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 font-mono text-xs">
                 <button
+                  type="button"
                   onClick={startAudioNarration}
-                  className="px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-emerald-500/30 text-emerald-300 font-mono text-xs flex items-center space-x-1.5 transition"
+                  className="px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-emerald-500/30 text-emerald-300 flex items-center space-x-1.5 transition"
                 >
                   <Headphones className="w-3.5 h-3.5" />
                   <span>POCKET MODE (AUDIO)</span>
                 </button>
 
                 <button
-                  onClick={() => setHapticsEnabled(!hapticsEnabled)}
-                  className={`px-3.5 py-2 rounded-xl border font-mono text-xs flex items-center space-x-1.5 transition ${
+                  type="button"
+                  onClick={() => setShowBreathingVisualizer(!showBreathingVisualizer)}
+                  className={`px-3.5 py-2 rounded-xl border flex items-center space-x-1.5 transition ${
+                    showBreathingVisualizer
+                      ? 'bg-purple-500/15 border-purple-500/40 text-purple-200'
+                      : 'bg-white/[0.03] border-white/[0.08] text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <Wind className="w-3.5 h-3.5" />
+                  <span>{showBreathingVisualizer ? 'PACER ON' : 'PACER OFF'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !hapticsEnabled;
+                    setHapticsEnabled(next);
+                    if (next) addToast("Vibration haptics enabled on supported phones.", "info");
+                  }}
+                  className={`px-3.5 py-2 rounded-xl border flex items-center space-x-1.5 transition ${
                     hapticsEnabled
                       ? 'bg-purple-500/20 border-purple-500 text-purple-200 animate-pulse'
                       : 'bg-white/[0.03] border-white/[0.08] text-neutral-400 hover:text-white'
                   }`}
+                  title="Vibrate device during box breathing"
                 >
                   <Vibrate className="w-3.5 h-3.5" />
-                  <span>{hapticsEnabled ? `HAPTICS [${breathPhase}]` : 'BOX BREATHING HAPTICS'}</span>
+                  <span>{hapticsEnabled ? 'HAPTICS [ON]' : 'HAPTICS'}</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingProof}
-                  className="px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-blue-500/30 text-blue-300 font-mono text-xs flex items-center space-x-1.5 transition"
+                  className="px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-blue-500/30 text-blue-300 flex items-center space-x-1.5 transition"
                 >
                   <Camera className="w-3.5 h-3.5" />
                   <span>
@@ -1111,38 +1493,26 @@ ${quote}`;
                 </button>
               </div>
 
-              {/* Fast Evaluator Preset Chips */}
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] max-w-sm mx-auto space-y-1.5">
-                <div className="text-[10px] font-mono text-neutral-500 flex items-center justify-between">
-                  <span>EVALUATOR TEST PRESETS:</span>
-                  <span className="text-amber-400">TEST CAMERA</span>
+              {/* Photo Preview and Proof Card */}
+              {touchImagePreview && (
+                <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.08] max-w-sm mx-auto flex items-center space-x-3 text-left">
+                  <img 
+                    src={touchImagePreview} 
+                    alt="Touch witness preview" 
+                    className="w-14 h-14 rounded-xl object-cover border border-emerald-500/40"
+                  />
+                  <div className="text-xs font-mono">
+                    <div className="text-neutral-400 text-[10px]">CAPTURED NATURE ELEMENT</div>
+                    <div className="text-emerald-300 font-semibold">
+                      {isUploadingProof ? 'Analyzing...' : proofOfTouch?.verified ? `${proofOfTouch.detected_element} ✓` : 'Photo recorded'}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  <button
-                    onClick={() => loadTestSample('leaf')}
-                    className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 transition"
-                  >
-                    🌿 Leaf
-                  </button>
-                  <button
-                    onClick={() => loadTestSample('bark')}
-                    className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 transition"
-                  >
-                    🌳 Bark
-                  </button>
-                  <button
-                    onClick={() => loadTestSample('screen')}
-                    className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-red-500/10 border border-red-500/30 text-red-300 transition"
-                    title="Tests classifier rejection of indoor digital code screens"
-                  >
-                    💻 Code Screen (Reject)
-                  </button>
-                </div>
-              </div>
+              )}
 
               {/* Proof of Touch Verification Banner */}
               {proofOfTouch && (
-                <div className={`p-3 rounded-xl border text-xs font-mono max-w-sm mx-auto ${
+                <div className={`p-3.5 rounded-xl border text-xs font-mono max-w-sm mx-auto text-left ${
                   proofOfTouch.verified ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200' : 'bg-red-500/10 border-red-500/40 text-red-200'
                 }`}>
                   <div className="font-semibold">{proofOfTouch.message}</div>
@@ -1151,6 +1521,38 @@ ${quote}`;
                   </div>
                 </div>
               )}
+
+              {/* Fast Evaluator Preset Chips */}
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] max-w-sm mx-auto space-y-2">
+                <div className="text-[10px] font-mono text-neutral-400 flex items-center justify-between">
+                  <span>EVALUATOR TEST PRESETS:</span>
+                  <span className="text-amber-400 font-semibold">TEST FIXTURES</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 justify-center font-mono">
+                  <button
+                    type="button"
+                    onClick={() => loadTestSample('leaf')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 transition"
+                  >
+                    🌿 Leaf (Verify)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => loadTestSample('bark')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 transition"
+                  >
+                    🌳 Bark (Verify)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => loadTestSample('screen')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-red-500/15 border border-red-500/30 text-red-300 transition"
+                    title="Tests classifier rejection of indoor digital code screens"
+                  >
+                    💻 Code Screen (Reject)
+                  </button>
+                </div>
+              </div>
 
               {/* Timer Expired Action */}
               {timerExpired && (
@@ -1173,12 +1575,13 @@ ${quote}`;
         {/* ============================================================== */}
         {appState === 'VALIDATION' && mission && (
           <div className="space-y-8 animate-fade-in">
+            {/* Celebration Header */}
             <div className="text-center space-y-3">
               <div className="inline-flex items-center space-x-2 font-mono text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>CIRCUIT BREAKER COMPLETE // RE-REGULATED</span>
               </div>
-              <h2 className="text-3xl sm:text-5xl font-light tracking-tight text-white">
+              <h2 className="text-3xl sm:text-5xl font-light tracking-tight text-white font-sans">
                 Welcome back to <span className="font-serif italic text-emerald-300 font-normal">reality</span>.
               </h2>
             </div>
@@ -1187,7 +1590,7 @@ ${quote}`;
             <div className="glass-panel p-6 sm:p-10 rounded-3xl glow-emerald-subtle space-y-6">
               <div className="flex items-center justify-between text-xs font-mono text-neutral-500 border-b border-white/[0.06] pb-4 flex-wrap gap-2">
                 <span>SOMATIC DIAGNOSIS: {mission.detected_emotion.toUpperCase()}</span>
-                <span className="text-emerald-400">VOLATILE RAM DISSOLVED</span>
+                <span className="text-emerald-400 font-semibold">VOLATILE RAM DISSOLVED</span>
               </div>
 
               <blockquote className="text-xl sm:text-2xl font-serif italic text-emerald-100/90 leading-relaxed">
@@ -1211,7 +1614,7 @@ ${quote}`;
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
                   <div className="text-neutral-500">TOUCH WITNESS</div>
                   <div className="text-sm font-semibold text-white mt-1">
-                    {proofOfTouch?.verified ? 'Authenticated ✓' : 'Unattested'}
+                    {proofOfTouch?.verified ? 'Authenticated ✓' : 'Self-Attested'}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
@@ -1223,55 +1626,56 @@ ${quote}`;
               </div>
             </div>
 
-            {/* Ephemeral Field Log Artifact */}
-            <div className="glass-panel p-5 sm:p-6 rounded-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3 flex-wrap gap-2">
-                <div className="flex items-center space-x-2 font-mono text-xs text-emerald-400 font-bold">
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>EPHEMERAL FIELD ATTESTATION</span>
-                </div>
-                <div className="flex items-center space-x-2 flex-wrap gap-2">
+            {/* Post-Grounding Gentle Check-in */}
+            <div className="glass-panel p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono">
+              <span className="text-neutral-400">How is your nervous system feeling now?</span>
+              <div className="flex items-center gap-2">
+                {[
+                  { label: 'Calmer', icon: Smile },
+                  { label: 'Grounded', icon: Heart },
+                  { label: 'Clear-Headed', icon: Sparkles }
+                ].map(({ label, icon: Icon }) => (
                   <button
-                    onClick={copyReceiptToClipboard}
-                    className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono text-neutral-300 hover:text-white flex items-center space-x-1.5 transition"
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setSomaticReflection(label);
+                      addToast(`Reflection: "${label}". Take this clarity with you.`, "success");
+                    }}
+                    className={`px-3 py-1.5 rounded-full border transition flex items-center space-x-1.5 ${
+                      somaticReflection === label
+                        ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-semibold'
+                        : 'bg-white/[0.02] border-white/[0.08] text-neutral-400 hover:text-white'
+                    }`}
                   >
-                    <Copy className="w-3 h-3" />
-                    <span>{copiedReceipt ? 'COPIED!' : 'COPY'}</span>
+                    <Icon className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{label}</span>
                   </button>
-                  <button
-                    onClick={downloadReceiptPng}
-                    disabled={isGeneratingPng}
-                    className="px-3 py-1.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono text-emerald-300 hover:text-white flex items-center space-x-1.5 transition"
-                  >
-                    <FileImage className="w-3 h-3 text-emerald-400" />
-                    <span>{isGeneratingPng ? 'RENDERING...' : 'SAVE PNG'}</span>
-                  </button>
-                  <button
-                    onClick={shareReceipt}
-                    className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono text-neutral-300 hover:text-white flex items-center space-x-1.5 transition"
-                  >
-                    <Share2 className="w-3 h-3" />
-                    <span>SHARE</span>
-                  </button>
-                  <button
-                    onClick={downloadReceiptTextFile}
-                    className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono text-neutral-300 hover:text-white flex items-center space-x-1.5 transition"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>.TXT</span>
-                  </button>
-                </div>
+                ))}
               </div>
-
-              <pre className="font-mono text-xs text-neutral-300 bg-black/40 p-4 rounded-xl border border-white/[0.06] overflow-x-auto leading-relaxed select-all">
-                {generateReceiptText()}
-              </pre>
             </div>
+
+            {/* Ephemeral Field Log Artifact with Dual View */}
+            <ReceiptCard
+              mission={mission}
+              stepCount={stepCount}
+              tabSwitches={tabSwitches}
+              proofOfTouch={proofOfTouch}
+              demoFastMode={demoFastMode}
+              rawReceiptText={generateReceiptText()}
+              onCopy={copyReceiptToClipboard}
+              onDownloadTxt={downloadReceiptTextFile}
+              onDownloadPng={downloadReceiptPng}
+              onShare={shareReceipt}
+              copied={copiedReceipt}
+              isGeneratingPng={isGeneratingPng}
+            />
 
             {/* DevRelay Session Trace Drawer */}
             {mission.reasoning_trace && mission.reasoning_trace.length > 0 && (
               <div className="glass-panel rounded-2xl overflow-hidden">
                 <button
+                  type="button"
                   onClick={() => setShowTraceDrawer(!showTraceDrawer)}
                   className="w-full px-5 py-3.5 flex items-center justify-between font-mono text-xs text-neutral-400 hover:text-white transition"
                 >
@@ -1296,14 +1700,15 @@ ${quote}`;
               </div>
             )}
 
-            {/* Destroy Session Button */}
+            {/* Complete Session Action */}
             <div className="pt-2">
               <button
+                type="button"
                 onClick={handleFullReset}
                 className="w-full py-4 sm:py-5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.1] text-white font-mono font-medium text-sm sm:text-base uppercase tracking-wider transition flex items-center justify-center space-x-2.5"
               >
-                <RotateCcw className="w-4 h-4 text-emerald-400" />
-                <span>PURGE VOLATILE MEMORY // RETURN TO LIFE</span>
+                <RefreshCw className="w-4 h-4 text-emerald-400" />
+                <span>START NEW SESSION // DISSOLVE VOLATILE MEMORY</span>
               </button>
             </div>
           </div>
@@ -1312,201 +1717,56 @@ ${quote}`;
       </main>
 
       {/* ============================================================== */}
+      {/* HOW IT WORKS GUIDANCE MODAL */}
+      {/* ============================================================== */}
+      <HowItWorksModal
+        isOpen={showHowItWorksModal}
+        onClose={() => setShowHowItWorksModal(false)}
+      />
+
+      {/* ============================================================== */}
       {/* 15 WORLDWIDE TRADITIONS EXPLORER MODAL */}
       {/* ============================================================== */}
-      {showTraditionsSelectorModal && (
-        <div 
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => setShowTraditionsSelectorModal(false)}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="glass-panel-elevated rounded-3xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl relative"
-          >
-            <div className="flex items-start justify-between border-b border-white/[0.08] pb-4">
-              <div>
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  15 PLANETARY NATURE TRADITIONS
-                </span>
-                <h3 className="text-xl sm:text-2xl font-light text-white mt-1.5">
-                  Select a Grounding Lineage
-                </h3>
-                <p className="text-xs text-neutral-400 font-sans mt-0.5">
-                  Rooted in centuries of indigenous wisdom and peer-reviewed autonomic neurobiology.
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowTraditionsSelectorModal(false)}
-                className="p-2 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-400 hover:text-white transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* List of 15 traditions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[55vh] overflow-y-auto pr-1">
-              {CULTURAL_TAXONOMY.map((tradition) => (
-                <div
-                  key={tradition.id}
-                  onClick={() => {
-                    setCulturalChoice(tradition.id);
-                    setShowTraditionsSelectorModal(false);
-                  }}
-                  className={`p-4 rounded-2xl border text-left transition font-mono text-xs flex flex-col justify-between cursor-pointer ${
-                    culturalChoice === tradition.id
-                      ? 'bg-emerald-500/15 border-emerald-500/50 text-white shadow-lg'
-                      : 'bg-white/[0.02] border-white/[0.06] text-neutral-300 hover:border-emerald-500/40 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] text-emerald-400 border border-white/[0.08]">
-                          {tradition.region}
-                        </span>
-                        <span className="text-[10px] text-neutral-500">{tradition.historicalPeriod}</span>
-                      </div>
-                      <div className="text-sm font-semibold text-white mt-1">{tradition.name}</div>
-                      <div className="text-xs text-emerald-400 font-serif italic mt-0.5">{tradition.nativeScript}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveLoreModal(tradition);
-                      }}
-                      className="p-1.5 hover:text-emerald-300 text-neutral-500 hover:bg-white/[0.05] rounded-full transition"
-                      title="Inspect clinical evidence"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 font-sans mt-2 line-clamp-2">
-                    {tradition.philosophicalCore}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-              <button
-                type="button"
-                onClick={() => {
-                  setCulturalChoice('Auto-Detect');
-                  setShowTraditionsSelectorModal(false);
-                }}
-                className="text-xs font-mono text-emerald-400 hover:underline"
-              >
-                Reset to Auto-Detect
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowTraditionsSelectorModal(false)}
-                className="px-4 py-2 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 font-mono text-xs transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TraditionsModal
+        isOpen={showTraditionsSelectorModal}
+        onClose={() => setShowTraditionsSelectorModal(false)}
+        selectedId={culturalChoice}
+        onSelect={(id) => {
+          setCulturalChoice(id);
+          addToast(
+            id === 'Auto-Detect' ? 'Lineage reset to Auto-Detect.' : `Applied lineage: ${id.split(' ')[0]}`,
+            "success"
+          );
+        }}
+        onInspectLore={(tradition) => setActiveLoreModal(tradition)}
+      />
 
       {/* ============================================================== */}
       {/* HISTORICAL PROVENANCE & CLINICAL EVIDENCE MODAL */}
       {/* ============================================================== */}
-      {activeLoreModal && (
-        <div 
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => setActiveLoreModal(null)}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="glass-panel-elevated rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl relative"
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-white/[0.08] pb-4">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {activeLoreModal.region}
-                  </span>
-                  <span className="text-[11px] font-mono text-neutral-500">
-                    {activeLoreModal.historicalPeriod}
-                  </span>
-                </div>
-                <h3 className="text-2xl sm:text-3xl font-light text-white mt-1.5">
-                  {activeLoreModal.name}
-                </h3>
-                <div className="text-emerald-400 font-serif italic text-lg tracking-wide mt-0.5">
-                  {activeLoreModal.nativeScript}
-                </div>
-              </div>
-              <button 
-                onClick={() => setActiveLoreModal(null)}
-                className="p-2 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-400 hover:text-white transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <LoreDetailModal
+        tradition={activeLoreModal}
+        onClose={() => setActiveLoreModal(null)}
+        onApply={(id) => {
+          setCulturalChoice(id);
+          setActiveLoreModal(null);
+          setShowTraditionsSelectorModal(false);
+          addToast(`Lineage applied: ${id.split(' ')[0]}`, "success");
+        }}
+        isApplied={culturalChoice === activeLoreModal?.id}
+      />
 
-            {/* Philosophical Core */}
-            <div className="space-y-1.5">
-              <h4 className="font-mono text-xs text-emerald-400 uppercase tracking-wider flex items-center space-x-1.5">
-                <Compass className="w-3.5 h-3.5" />
-                <span>Indigenous Lineage & Philosophy:</span>
-              </h4>
-              <p className="text-sm text-neutral-300 leading-relaxed bg-white/[0.02] p-4 rounded-2xl border border-white/[0.06] font-sans">
-                {activeLoreModal.philosophicalCore}
-              </p>
-            </div>
-
-            {/* Clinical Neurobiology & Evidence */}
-            <div className="space-y-1.5">
-              <h4 className="font-mono text-xs text-emerald-400 uppercase tracking-wider flex items-center space-x-1.5">
-                <Activity className="w-3.5 h-3.5" />
-                <span>Clinical Trials & Modern Neurobiology:</span>
-              </h4>
-              <p className="text-sm text-neutral-300 leading-relaxed bg-white/[0.02] p-4 rounded-2xl border border-white/[0.06] border-l-2 border-l-emerald-500 font-sans">
-                {activeLoreModal.clinicalEvidence}
-              </p>
-            </div>
-
-            {/* Ancestral Quote */}
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] italic text-emerald-200/90 text-sm font-serif">
-              "{activeLoreModal.ancestralQuote}"
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end space-x-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCulturalChoice(activeLoreModal.id);
-                  setActiveLoreModal(null);
-                  setShowTraditionsSelectorModal(false);
-                }}
-                className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-semibold text-xs uppercase tracking-wider transition"
-              >
-                Apply This Lineage
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLoreModal(null)}
-                className="px-5 py-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-neutral-300 font-mono text-xs uppercase tracking-wider transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ============================================================== */}
+      {/* EMERGENCY EXIT CONFIRMATION MODAL */}
+      {/* ============================================================== */}
+      <EmergencyExitModal
+        isOpen={showEmergencyExitModal}
+        onCancel={() => setShowEmergencyExitModal(false)}
+        onConfirmExit={handleConfirmEmergencyExit}
+      />
 
       {/* Global Minimalist Footer */}
-      <footer className="border-t border-white/[0.06] bg-[#08090d]/80 px-4 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 gap-2 z-10">
+      <footer className="border-t border-white/[0.06] bg-[#08090d]/85 px-4 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-500 gap-2 z-10">
         <div>
           EXHALE // Grounding Protocol: Acute Emotional Circuit Breaker
         </div>
