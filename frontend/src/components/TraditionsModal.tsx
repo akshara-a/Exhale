@@ -187,11 +187,11 @@ export const TraditionsModal: React.FC<TraditionsModalProps> = ({
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] text-emerald-400 border border-white/[0.08]">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.04] text-emerald-400 border border-white/[0.08] shrink-0">
                           {tradition.region}
                         </span>
-                        <span className="text-[10px] text-neutral-500 truncate max-w-[150px]">
+                        <span className="text-[10px] text-neutral-500 truncate max-w-[140px]">
                           {tradition.historicalPeriod}
                         </span>
                       </div>
@@ -201,7 +201,7 @@ export const TraditionsModal: React.FC<TraditionsModalProps> = ({
                           e.stopPropagation();
                           onInspectLore(tradition);
                         }}
-                        className="p-1.5 text-neutral-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition"
+                        className="p-1.5 text-neutral-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition shrink-0"
                         title="Inspect clinical evidence & provenance"
                       >
                         <BookOpen className="w-3.5 h-3.5" />

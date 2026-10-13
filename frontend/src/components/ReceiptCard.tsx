@@ -61,7 +61,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
       {/* Top Action Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
         {/* View Switcher Tabs */}
-        <div className="inline-flex p-1 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono">
+        <div className="inline-flex p-1 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono self-start sm:self-auto">
           <button
             type="button"
             onClick={() => setViewMode('CARD')}
@@ -88,8 +88,8 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
           </button>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-2 flex-wrap">
+        {/* Action Buttons with proper gap */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={onCopy}
@@ -138,10 +138,10 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
         <div className="space-y-6 pt-2 font-mono">
           {/* Certificate Header Banner */}
           <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-black/40 to-emerald-950/20 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[11px] uppercase tracking-widest text-emerald-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-[11px] uppercase tracking-widest text-emerald-400 font-semibold truncate">
                   OFFICIAL EPHEMERAL ATTESTATION
                 </span>
               </div>
@@ -153,7 +153,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center space-x-2 sm:self-center">
+            <div className="flex items-center space-x-2 sm:self-center shrink-0">
               <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 text-xs font-bold text-center">
                 <ShieldCheck className="w-4 h-4 mx-auto mb-0.5 text-emerald-400" />
                 <span>0 BYTES STORED</span>
@@ -163,46 +163,46 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
 
           {/* Key Attestation Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">SOMATIC DIAGNOSIS</div>
-              <div className="text-white font-medium flex items-center space-x-2">
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>{mission.detected_emotion.toUpperCase()}</span>
+              <div className="text-white font-medium flex items-center space-x-2 truncate">
+                <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">{mission.detected_emotion.toUpperCase()}</span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">ANCESTRAL LINEAGE</div>
-              <div className="text-emerald-300 font-medium truncate flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <div className="text-emerald-300 font-medium flex items-center space-x-1.5 min-w-0">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span className="truncate">{mission.cultural_framework || 'Japanese Shinrin-yoku'}</span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">ATMOSPHERIC ANCHOR</div>
               <div className="text-neutral-200 truncate">
                 {mission.weather_context || 'Ambient Outdoor Air'}
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">PHYSICAL TOUCH WITNESS</div>
-              <div className={`font-medium ${proofOfTouch?.verified ? 'text-emerald-400' : 'text-neutral-400'}`}>
+              <div className={`font-medium truncate ${proofOfTouch?.verified ? 'text-emerald-400' : 'text-neutral-400'}`}>
                 {proofOfTouch?.verified 
                   ? `Authenticated (${proofOfTouch.detected_element.toUpperCase()}) ✓` 
                   : 'Self-Attested'}
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">STEPS PACED AWAY FROM SCREEN</div>
               <div className="text-white font-medium">
                 {stepCount} Registered Steps
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 min-w-0">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider">CIRCUIT DISCIPLINE</div>
               <div className={tabSwitches === 0 ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
                 {tabSwitches === 0 ? '0 Tab Relapses (Flawless Immersion)' : `${tabSwitches} Reset Triggers`}
@@ -227,7 +227,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({
             <span className="truncate max-w-xs font-mono">
               PURGE SHA-256: <strong className="text-neutral-300 font-normal">{hash.slice(0, 16)}...</strong>
             </span>
-            <span className="text-emerald-400 flex items-center space-x-1">
+            <span className="text-emerald-400 flex items-center space-x-1 shrink-0">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Volatile Memory Zeroed</span>
             </span>
