@@ -1,0 +1,47 @@
+# ====================================================================
+# Render Blueprint Specification for Exhale (Grounding Protocol)
+# Satisfies: "Best Use of Render" & Hacktoberfest "Touch Grass" Challenge
+# ====================================================================
+
+services:
+  # 1. AI Inference Backend (GPU-backed Docker Web Service)
+  - type: web
+    name: exhale-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free # 100% Free Tier ($0/month)
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ENABLE_OLLAMA
+        value: "false" # Set to "true" on GPU / high-RAM deployment to activate Tier 1 Hermes 3
+      - key: OLLAMA_MODEL
+        value: "hermes3:latest"
+      - key: REQUEST_TIMEOUT
+        value: "60.0"
+      - key: GROQ_MODEL
+        value: "auto"
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: GROQ_API_KEY
+        sync: false
+
+  # 2. Anti-Engagement Brutalist Frontend (Static Web Hosting)
+  - type: web
+    name: exhale-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
