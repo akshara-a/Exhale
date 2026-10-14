@@ -50,7 +50,8 @@ import { StepProgress } from './components/StepProgress';
 import { HowItWorksModal } from './components/HowItWorksModal';
 import { TraditionsModal } from './components/TraditionsModal';
 import { LoreDetailModal } from './components/LoreDetailModal';
-import { EmergencyExitModal } from './components/EmergencyExitModal';
+import { CircuitBreakerExitModal } from './components/CircuitBreakerExitModal';
+import { StepPeekModal } from './components/StepPeekModal';
 import { ReceiptCard } from './components/ReceiptCard';
 import { WeatherPopover } from './components/WeatherPopover';
 import { ToastContainer, ToastMessage } from './components/Toast';
@@ -101,8 +102,9 @@ export default function App() {
   const [demoFastMode, setDemoFastMode] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [timerExpired, setTimerExpired] = useState(false);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
   
-  // Page Visibility & Tab Switch Penalty
+  // Page Visibility & Tab Switch Count
   const [tabSwitches, setTabSwitches] = useState(0);
 
   // Audio & Soundscape State
@@ -145,6 +147,7 @@ export default function App() {
   const [showTraditionsSelectorModal, setShowTraditionsSelectorModal] = useState(false);
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
   const [showEmergencyExitModal, setShowEmergencyExitModal] = useState(false);
+  const [showStepPeekModal, setShowStepPeekModal] = useState(false);
 
   // Toast System
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -360,6 +363,7 @@ export default function App() {
     const duration = demoFastMode ? 10 : 600;
     setTimeLeft(duration);
     setTimerExpired(false);
+    setIsTimerPaused(false);
     setTabSwitches(0);
     setStepCount(0);
     setAppState('LOCK');
@@ -371,9 +375,32 @@ export default function App() {
     }
   };
 
+  // Resume Grounding Session
+  const handleResumeSession = () => {
+    setIsTimerPaused(false);
+    setAppState('LOCK');
+    if (ambientSoundActive) {
+      soundscape.startAmbientSoundscape();
+    }
+    addToast("Grounding session resumed.", "success", "Session Resumed");
+  };
+
+  // Toggle Timer Pause / Play
+  const toggleTimerPause = () => {
+    setIsTimerPaused((prev) => {
+      const next = !prev;
+      if (next) {
+        addToast("Grounding timer paused. Take your time.", "info", "Session Paused");
+      } else {
+        addToast("Grounding timer resumed.", "success", "Session Resumed");
+      }
+      return next;
+    });
+  };
+
   // Main Countdown Timer Tick
   useEffect(() => {
-    if (appState === 'LOCK' && !timerExpired) {
+    if (appState === 'LOCK' && !timerExpired && !isTimerPaused) {
       timerRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
@@ -390,28 +417,29 @@ export default function App() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [appState, timerExpired]);
+  }, [appState, timerExpired, isTimerPaused]);
 
-  // Page Visibility API Hook: Tab Switch Penalty
+  // Page Visibility API Hook: Focus Interruption (Pause on Blur/Tab Switch - No Reset)
   useEffect(() => {
     if (appState !== 'LOCK' || timerExpired) return;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        triggerPenalty("Tab switch detected. You broke grounding focus.");
+      if (document.visibilityState === 'hidden' && !isTimerPaused) {
+        triggerPauseInterruption("Tab switch detected.");
       }
     };
 
     const handleWindowBlur = () => {
-      triggerPenalty("Window lost focus. Resist the screen's gravity.");
+      if (!isTimerPaused) {
+        triggerPauseInterruption("Window lost focus.");
+      }
     };
 
-    const triggerPenalty = (reason: string) => {
-      const resetDuration = demoFastMode ? 10 : 600;
-      setTimeLeft(resetDuration);
+    const triggerPauseInterruption = (reason: string) => {
+      setIsTimerPaused(true);
       setTabSwitches((prev) => prev + 1);
-      const msg = `${reason} Timer reset to ${demoFastMode ? '10 seconds' : '10:00'}.`;
-      addToast(msg, "warning", "Circuit Breaker Triggered");
+      const msg = `${reason} Session paused — click Continue when you are ready to resume.`;
+      addToast(msg, "warning", "Focus Interrupted • Session Paused");
 
       soundscape.playBowlChime(220, 1.2);
     };
@@ -423,7 +451,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [appState, timerExpired, demoFastMode, addToast]);
+  }, [appState, timerExpired, isTimerPaused, addToast]);
 
   // Motion & Step-Pacing Verification Hook
   useEffect(() => {
@@ -515,7 +543,7 @@ export default function App() {
 
   // Box Breathing Pacer (Box Breathing: 4s Inhale, 4s Hold, 4s Exhale, 4s HoldEmpty)
   useEffect(() => {
-    if (appState !== 'LOCK' || timerExpired) {
+    if (appState !== 'LOCK' || timerExpired || isTimerPaused) {
       if (breathTimerRef.current) clearInterval(breathTimerRef.current);
       return;
     }
@@ -549,7 +577,7 @@ export default function App() {
       if (breathTimerRef.current) clearInterval(breathTimerRef.current);
       clearInterval(countdownInterval);
     };
-  }, [appState, timerExpired, hapticsEnabled]);
+  }, [appState, timerExpired, isTimerPaused, hapticsEnabled]);
 
   // Multimodal Proof of Touch Upload Handler
   const handleProofOfTouchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -759,10 +787,14 @@ ${quote}`;
   // Complete Reset (Zero retention)
   const handleFullReset = () => {
     soundscape.stopAmbientSoundscape();
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (breathTimerRef.current) clearInterval(breathTimerRef.current);
     setAppState('INPUT');
     setBrainDump('');
     setMission(null);
+    setTimeLeft(demoFastMode ? 10 : 600);
     setTimerExpired(false);
+    setIsTimerPaused(false);
     setErrorMsg(null);
     setPocketModeActive(false);
     setAmbientSoundActive(false);
@@ -776,13 +808,35 @@ ${quote}`;
     addToast("Volatile memory dissolved. Zero bytes persisted.", "info", "Clean Slate");
   };
 
-  // Emergency Exit Confirm
-  const handleConfirmEmergencyExit = () => {
+  // Circuit Breaker Go Back Handlers (Pause Session Without Reset)
+  const handleReturnToMission = () => {
     setShowEmergencyExitModal(false);
-    setAppState('MISSION');
+    setShowStepPeekModal(false);
+    setIsTimerPaused(true);
     if (timerRef.current) clearInterval(timerRef.current);
     soundscape.stopAmbientSoundscape();
-    addToast("Returned to protocol view early.", "info");
+    setAppState('MISSION');
+    addToast(`Session paused (${formatTime(timeLeft)} remaining). You can resume grounding anytime.`, "info", "Session Paused");
+  };
+
+  const handleReturnToInput = () => {
+    setShowEmergencyExitModal(false);
+    setShowStepPeekModal(false);
+    setIsTimerPaused(true);
+    if (timerRef.current) clearInterval(timerRef.current);
+    soundscape.stopAmbientSoundscape();
+    setAppState('INPUT');
+    addToast("Session paused. Text preserved. Edit your burden and resume when ready.", "info", "Session Paused");
+  };
+
+  const handleOpenExitModal = () => {
+    setIsTimerPaused(true);
+    setShowEmergencyExitModal(true);
+  };
+
+  const handlePeekSteps = () => {
+    setShowEmergencyExitModal(false);
+    setShowStepPeekModal(true);
   };
 
   // Active Tradition Lore lookup
@@ -944,6 +998,7 @@ ${quote}`;
         <StepProgress 
           currentStage={appState} 
           onNavigateToInput={appState === 'MISSION' ? () => setAppState('INPUT') : undefined} 
+          onNavigateToMission={appState === 'INPUT' && mission ? () => setAppState('MISSION') : undefined}
         />
       </div>
 
@@ -955,6 +1010,24 @@ ${quote}`;
         {/* ============================================================== */}
         {appState === 'INPUT' && (
           <div className="space-y-8 sm:space-y-10 animate-fade-in">
+            {/* If Mission Already Calibrated, show return pill */}
+            {mission && (
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-white/[0.02] border border-emerald-500/30 flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center space-x-2 text-emerald-300">
+                  <Compass className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Grounding protocol already calibrated</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAppState('MISSION')}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 hover:text-white font-semibold transition flex items-center space-x-1.5"
+                >
+                  <span>Return to Protocol Steps</span>
+                  <span>→</span>
+                </button>
+              </div>
+            )}
+
             {/* Minimalist Editorial Headline */}
             <div className="space-y-4">
               <div className="inline-flex items-center space-x-2 font-mono text-[11px] px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
@@ -1334,18 +1407,45 @@ ${quote}`;
                     <strong className="underline text-amber-300">
                       {demoFastMode ? '10 seconds (Speedrun Demo)' : '10 minutes of genuine offline presence'}
                     </strong>
-                    . If you switch tabs, the circuit resets automatically. You can always exit early if needed.
+                    . You can pause, review your steps, and resume at any time. Your session never resets without your consent.
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={handleGoOutside}
-                className="w-full py-5 sm:py-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base sm:text-lg uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 shadow-xl"
-              >
-                <Lock className="w-5 h-5" />
-                <span>I AM CROSSING THE THRESHOLD // I AM GOING OUTSIDE</span>
-              </button>
+              {/* If a session is in progress, provide Continue / Resume + Restart options */}
+              {timeLeft < totalDuration && !timerExpired ? (
+                <div className="space-y-3">
+                  <button
+                    onClick={handleResumeSession}
+                    className="w-full py-5 sm:py-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base sm:text-lg uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 shadow-xl"
+                  >
+                    <Play className="w-5 h-5 fill-current" />
+                    <span>▶ CONTINUE GROUNDING // RESUME ({formatTime(timeLeft)} LEFT)</span>
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-neutral-400 px-1 gap-2">
+                    <span className="flex items-center space-x-1.5 text-amber-300">
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                      <span>Session paused at {formatTime(timeLeft)} remaining</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGoOutside}
+                      className="text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition"
+                    >
+                      ↺ Restart fresh {demoFastMode ? '10s' : '10m'} session
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGoOutside}
+                  className="w-full py-5 sm:py-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base sm:text-lg uppercase tracking-wider transition-all duration-200 glow-emerald transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-3 shadow-xl"
+                >
+                  <Lock className="w-5 h-5" />
+                  <span>I AM CROSSING THE THRESHOLD // I AM GOING OUTSIDE</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1356,20 +1456,54 @@ ${quote}`;
         {appState === 'LOCK' && (
           <div className="fixed inset-0 bg-[#08090d] z-50 flex flex-col justify-between p-4 sm:p-6 text-center select-none overflow-y-auto">
             {/* Top Bar inside Lock Screen */}
-            <div className="w-full max-w-xl mx-auto flex items-center justify-between text-xs font-mono text-neutral-500 py-2 shrink-0">
-              <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0" />
-                <span className="text-neutral-400 uppercase tracking-wider text-[11px]">DISCONNECTED FROM CODE</span>
-              </div>
-              
-              {/* Emergency Unlock Button */}
+            <div className="w-full max-w-xl mx-auto flex items-center justify-between gap-2 text-xs font-mono text-neutral-500 py-2 shrink-0">
+              {/* Go Back / Options Button */}
               <button
                 type="button"
-                onClick={() => setShowEmergencyExitModal(true)}
-                className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-400 hover:text-white border border-white/[0.08] transition shrink-0"
+                onClick={handleOpenExitModal}
+                className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-300 hover:text-white border border-white/[0.08] transition shrink-0 flex items-center space-x-1.5 text-[11px]"
+                title="Options to return to steps or edit input"
               >
-                ✕ Exit Session Early
+                <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Go Back</span>
               </button>
+
+              <div className="flex items-center space-x-2">
+                {isTimerPaused ? (
+                  <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-semibold animate-pulse">
+                    <Pause className="w-3 h-3 text-amber-400 fill-current shrink-0" />
+                    <span>PAUSED</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0" />
+                    <span className="text-neutral-400 uppercase tracking-wider text-[11px] hidden sm:inline">DISCONNECTED FROM CODE</span>
+                  </>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Peek Steps Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowStepPeekModal(true)}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 transition shrink-0 flex items-center space-x-1.5 text-[11px]"
+                  title="Peek at your 5 steps without leaving"
+                >
+                  <Eye className="w-3 h-3 text-emerald-400" />
+                  <span>Peek Steps</span>
+                </button>
+
+                {/* Exit Session Button */}
+                <button
+                  type="button"
+                  onClick={handleOpenExitModal}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-neutral-400 hover:text-white border border-white/[0.08] transition shrink-0 text-[11px]"
+                  title="Session options & exit"
+                >
+                  ✕ Options
+                </button>
+              </div>
             </div>
 
             <div className="max-w-xl w-full mx-auto space-y-6 sm:space-y-7 animate-fade-in py-4 my-auto">
@@ -1379,23 +1513,76 @@ ${quote}`;
                 <span>CIRCUIT BREAKER ENGAGED // SCREEN SILENCED</span>
               </div>
 
-              {/* Massive Minimalist Countdown Clock with Progress */}
-              <div className="space-y-2 relative">
-                <div className="font-mono text-7xl sm:text-9xl font-extralight tracking-tight text-white glow-emerald">
+              {/* Massive Minimalist Countdown Clock with Progress & Pause Control */}
+              <div className="space-y-3 relative">
+                {/* Status indicator */}
+                <div className="flex items-center justify-center">
+                  {isTimerPaused ? (
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-xs font-semibold animate-pulse">
+                      <Pause className="w-3 h-3 fill-current" />
+                      <span>SESSION PAUSED</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>SESSION ACTIVE</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`font-mono text-7xl sm:text-9xl font-extralight tracking-tight transition-all duration-300 ${
+                  isTimerPaused ? 'text-amber-200/90' : 'text-white glow-emerald'
+                }`}>
                   {formatTime(timeLeft)}
                 </div>
 
                 {/* Progress bar */}
                 <div className="w-48 h-1 bg-white/[0.06] rounded-full mx-auto overflow-hidden">
                   <div 
-                    className="h-full bg-emerald-400 transition-all duration-1000"
+                    className={`h-full transition-all duration-1000 ${isTimerPaused ? 'bg-amber-400' : 'bg-emerald-400'}`}
                     style={{ width: `${timerProgressPct}%` }}
                   />
                 </div>
 
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-400">
-                  {timerExpired ? "RECONNECTION CYCLE COMPLETE" : "TIME REMAINING IN THE LIVING WORLD"}
+                  {timerExpired 
+                    ? "RECONNECTION CYCLE COMPLETE" 
+                    : isTimerPaused 
+                    ? "SESSION PAUSED // TAKE YOUR TIME" 
+                    : "TIME REMAINING IN THE LIVING WORLD"}
                 </p>
+
+                {/* Primary In-Screen Pause / Continue Control */}
+                {!timerExpired && (
+                  <div className="pt-1 flex flex-col items-center justify-center space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={toggleTimerPause}
+                      className={`px-5 py-2.5 rounded-2xl border font-mono text-xs uppercase tracking-wider transition-all duration-200 flex items-center space-x-2 font-bold shadow-lg transform hover:-translate-y-0.5 active:translate-y-0 ${
+                        isTimerPaused
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 border-emerald-400 glow-emerald ring-2 ring-emerald-500/30'
+                          : 'bg-white/[0.04] hover:bg-white/[0.08] text-neutral-200 border-white/[0.12] hover:border-amber-500/40'
+                      }`}
+                    >
+                      {isTimerPaused ? (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>▶ CONTINUE GROUNDING</span>
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-3.5 h-3.5 fill-current" />
+                          <span>⏸ PAUSE TIMER</span>
+                        </>
+                      )}
+                    </button>
+                    {isTimerPaused && (
+                      <span className="text-[11px] font-sans text-neutral-400">
+                        Timer paused. Take a deep breath — click Continue whenever you are ready.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Box Breathing Visualizer Orb for All Users */}
@@ -1565,6 +1752,32 @@ ${quote}`;
                     title="Tests classifier rejection of indoor digital code screens"
                   >
                     💻 Code Screen (Reject)
+                  </button>
+                </div>
+              </div>
+
+              {/* Secondary Navigation: Quick Options to Go Back */}
+              <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] max-w-sm mx-auto text-xs font-mono space-y-2">
+                <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>OPTIONS TO GO BACK:</span>
+                  <span className="text-emerald-400">SESSION CONTROLS</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReturnToMission}
+                    className="p-2.5 rounded-xl bg-white/[0.03] hover:bg-emerald-500/10 border border-white/[0.08] hover:border-emerald-500/40 text-left text-neutral-300 hover:text-emerald-300 transition group"
+                  >
+                    <div className="text-[10px] text-neutral-500 group-hover:text-emerald-400 transition-colors">STEP 2</div>
+                    <div className="font-semibold text-xs mt-0.5">← Review Steps</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReturnToInput}
+                    className="p-2.5 rounded-xl bg-white/[0.03] hover:bg-blue-500/10 border border-white/[0.08] hover:border-blue-500/40 text-left text-neutral-300 hover:text-blue-300 transition group"
+                  >
+                    <div className="text-[10px] text-neutral-500 group-hover:text-blue-400 transition-colors">STEP 1</div>
+                    <div className="font-semibold text-xs mt-0.5">↩ Edit Burden</div>
                   </button>
                 </div>
               </div>
@@ -1775,12 +1988,30 @@ ${quote}`;
       />
 
       {/* ============================================================== */}
-      {/* EMERGENCY EXIT CONFIRMATION MODAL */}
+      {/* CIRCUIT BREAKER OPTIONS TO GO BACK MODAL */}
       {/* ============================================================== */}
-      <EmergencyExitModal
+      <CircuitBreakerExitModal
         isOpen={showEmergencyExitModal}
         onCancel={() => setShowEmergencyExitModal(false)}
-        onConfirmExit={handleConfirmEmergencyExit}
+        onResume={() => {
+          setShowEmergencyExitModal(false);
+          setIsTimerPaused(false);
+          addToast("Grounding session resumed.", "success", "Session Resumed");
+        }}
+        onReturnToMission={handleReturnToMission}
+        onReturnToInput={handleReturnToInput}
+        onPeekSteps={handlePeekSteps}
+        formattedTimeLeft={formatTime(timeLeft)}
+      />
+
+      {/* ============================================================== */}
+      {/* QUICK STEP PEEK MODAL (IN-SESSION REFERENCE) */}
+      {/* ============================================================== */}
+      <StepPeekModal
+        mission={mission}
+        isOpen={showStepPeekModal}
+        onClose={() => setShowStepPeekModal(false)}
+        onExitToSteps={handleReturnToMission}
       />
 
       {/* Global Minimalist Footer */}

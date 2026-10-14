@@ -5,6 +5,7 @@ import { Check, Edit3, Compass, Lock, Award } from 'lucide-react';
 interface StepProgressProps {
   currentStage: AppState;
   onNavigateToInput?: () => void;
+  onNavigateToMission?: () => void;
 }
 
 interface StageInfo {
@@ -22,7 +23,11 @@ const STAGES: StageInfo[] = [
   { key: 'VALIDATION', number: 4, label: 'Attestation', shortLabel: 'Grounded', icon: Award },
 ];
 
-export const StepProgress: React.FC<StepProgressProps> = ({ currentStage, onNavigateToInput }) => {
+export const StepProgress: React.FC<StepProgressProps> = ({ 
+  currentStage, 
+  onNavigateToInput,
+  onNavigateToMission 
+}) => {
   const currentIndex = STAGES.findIndex((s) => s.key === currentStage);
 
   return (
@@ -31,8 +36,15 @@ export const StepProgress: React.FC<StepProgressProps> = ({ currentStage, onNavi
         {STAGES.map((stage, idx) => {
           const isCompleted = idx < currentIndex;
           const isCurrent = idx === currentIndex;
-          const isNavigable = isCompleted && stage.key === 'INPUT' && onNavigateToInput;
+          const isNavigable = 
+            (isCompleted && stage.key === 'INPUT' && onNavigateToInput) ||
+            (stage.key === 'MISSION' && currentStage === 'INPUT' && onNavigateToMission);
           const Icon = stage.icon;
+
+          const handleClick = () => {
+            if (stage.key === 'INPUT' && onNavigateToInput) onNavigateToInput();
+            if (stage.key === 'MISSION' && onNavigateToMission) onNavigateToMission();
+          };
 
           return (
             <React.Fragment key={stage.key}>
@@ -41,20 +53,22 @@ export const StepProgress: React.FC<StepProgressProps> = ({ currentStage, onNavi
                 <button
                   type="button"
                   disabled={!isNavigable}
-                  onClick={isNavigable ? onNavigateToInput : undefined}
+                  onClick={isNavigable ? handleClick : undefined}
                   className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-mono text-xs transition-all duration-300 shrink-0 ${
                     isCurrent
                       ? 'bg-emerald-500 text-neutral-950 font-bold ring-4 ring-emerald-500/20 shadow-lg glow-emerald'
                       : isCompleted
                       ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                      : isNavigable
+                      ? 'bg-white/[0.04] border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20'
                       : 'bg-[#11131c] border border-white/[0.08] text-neutral-500'
                   } ${isNavigable ? 'cursor-pointer hover:scale-105' : 'cursor-default'}`}
-                  title={isNavigable ? 'Click to edit your input' : stage.label}
+                  title={isNavigable ? (stage.key === 'INPUT' ? 'Click to edit your input' : 'Click to view protocol steps') : stage.label}
                 >
                   {isCompleted ? (
                     <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
                   ) : (
-                    <Icon className={`w-3.5 h-3.5 ${isCurrent ? 'text-neutral-950' : 'text-neutral-400'}`} />
+                    <Icon className={`w-3.5 h-3.5 ${isCurrent ? 'text-neutral-950' : isNavigable ? 'text-emerald-400' : 'text-neutral-400'}`} />
                   )}
                 </button>
 
@@ -62,7 +76,7 @@ export const StepProgress: React.FC<StepProgressProps> = ({ currentStage, onNavi
                   className={`mt-1.5 text-[10px] sm:text-[11px] font-mono tracking-wider transition-colors duration-200 block truncate max-w-full ${
                     isCurrent
                       ? 'text-emerald-300 font-semibold'
-                      : isCompleted
+                      : isCompleted || isNavigable
                       ? 'text-neutral-400'
                       : 'text-neutral-600'
                   }`}
