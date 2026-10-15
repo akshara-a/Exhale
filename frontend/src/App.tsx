@@ -37,7 +37,10 @@ import {
   Pause,
   Trash2,
   ShieldCheck,
-  Sun
+  Sun,
+  Trophy,
+  CheckCheck,
+  RotateCcw
 } from 'lucide-react';
 
 import { AppState, GroundingMission, GroundingStep, WeatherTelemetry, ProofOfTouchResponse } from './types';
@@ -55,6 +58,7 @@ import { StepPeekModal } from './components/StepPeekModal';
 import { ReceiptCard } from './components/ReceiptCard';
 import { WeatherPopover } from './components/WeatherPopover';
 import { ToastContainer, ToastMessage } from './components/Toast';
+import { CompletionRewardBanner } from './components/CompletionRewardBanner';
 
 // Ergonomic Acute State Scenario Presets
 const SCENARIOS = [
@@ -778,10 +782,45 @@ ${quote}`;
   const toggleStepReviewed = (stepNum: number) => {
     setReviewedSteps((prev) => {
       const next = new Set(prev);
-      if (next.has(stepNum)) next.delete(stepNum);
-      else next.add(stepNum);
+      if (next.has(stepNum)) {
+        next.delete(stepNum);
+      } else {
+        next.add(stepNum);
+        if (mission && next.size === mission.steps.length) {
+          soundscape.playBowlChime(528, 3.5);
+          addToast("🎉 All 5 sensory steps completed! You can now claim your attestation reward.", "success", "Protocol Fulfilled");
+        }
+      }
       return next;
     });
+  };
+
+  // Mark all steps as done at once
+  const handleMarkAllStepsDone = () => {
+    if (!mission) return;
+    const allIndices = new Set(mission.steps.map((s) => s.step_number));
+    setReviewedSteps(allIndices);
+    soundscape.playBowlChime(528, 3.5);
+    addToast("🎉 All 5 sensory steps marked as done! Claim your attestation reward.", "success", "Protocol Fulfilled");
+  };
+
+  // Uncheck all steps
+  const handleUncheckAllSteps = () => {
+    setReviewedSteps(new Set());
+    addToast("Checklist reset. Take your time with each action.", "info");
+  };
+
+  // Claim completion reward & transition to Attestation validation
+  const handleClaimCompletionReward = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (breathTimerRef.current) clearInterval(breathTimerRef.current);
+    setShowStepPeekModal(false);
+    setShowEmergencyExitModal(false);
+    setTimerExpired(true);
+    setIsTimerPaused(false);
+    soundscape.playBowlChime(528, 4.0);
+    setAppState('VALIDATION');
+    addToast("🏆 Attestation unlocked! Welcome back to reality.", "success", "Mission Complete");
   };
 
   // Complete Reset (Zero retention)
@@ -847,6 +886,9 @@ ${quote}`;
   // Total seconds for circle progress calculation
   const totalDuration = demoFastMode ? 10 : 600;
   const timerProgressPct = Math.max(0, Math.min(100, ((totalDuration - timeLeft) / totalDuration) * 100));
+
+  // Completion status: all steps marked done
+  const allStepsDone = !!mission && mission.steps.length > 0 && reviewedSteps.size === mission.steps.length;
 
   // ==============================================================
   // POCKET MODE BLACKOUT RENDER
@@ -1336,12 +1378,36 @@ ${quote}`;
               )}
             </div>
 
-            {/* Preparation checklist status */}
-            <div className="flex items-center justify-between text-xs font-mono text-neutral-400 px-1">
+            {/* Preparation checklist status with Mark All Done toggle */}
+            <div className="flex flex-wrap items-center justify-between text-xs font-mono text-neutral-400 px-1 gap-2">
               <span>5 Sensory Actions for the Open Air:</span>
-              <span className="text-emerald-400">
-                {reviewedSteps.size > 0 ? `${reviewedSteps.size} of ${mission.steps.length} readied` : 'Review each step'}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className={allStepsDone ? "text-emerald-400 font-bold" : "text-neutral-400"}>
+                  {reviewedSteps.size} of {mission.steps.length} completed
+                </span>
+                <button
+                  type="button"
+                  onClick={allStepsDone ? handleUncheckAllSteps : handleMarkAllStepsDone}
+                  className={`px-2.5 py-1 rounded-lg border transition text-[11px] font-mono flex items-center space-x-1.5 cursor-pointer ${
+                    allStepsDone
+                      ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300'
+                      : 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300'
+                  }`}
+                  title={allStepsDone ? "Uncheck all steps" : "Mark all 5 steps as completed"}
+                >
+                  {allStepsDone ? (
+                    <>
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Uncheck All</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Mark All Done</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Steps Container */}
@@ -1352,9 +1418,9 @@ ${quote}`;
                 return (
                   <div
                     key={step.step_number}
-                    className={`glass-panel p-5 sm:p-6 rounded-2xl transition-all space-y-3 ${
+                    className={`glass-panel p-5 sm:p-6 rounded-2xl transition-all duration-300 space-y-3 ${
                       isChecked 
-                        ? 'border-emerald-500/40 bg-emerald-950/10' 
+                        ? 'border-emerald-500/50 bg-emerald-950/20 shadow-lg glow-emerald-subtle' 
                         : 'hover:border-white/[0.12]'
                     }`}
                   >
@@ -1374,17 +1440,17 @@ ${quote}`;
                       <button
                         type="button"
                         onClick={() => toggleStepReviewed(step.step_number)}
-                        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono transition shrink-0 ${
+                        className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all duration-200 shrink-0 cursor-pointer ${
                           isChecked 
-                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' 
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-semibold' 
                             : 'bg-white/[0.02] border-white/[0.08] text-neutral-400 hover:text-white'
                         }`}
-                        title="Mark step as understood and readied"
+                        title="Mark step as completed"
                       >
-                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${isChecked ? 'bg-emerald-500 border-emerald-500 text-neutral-950' : 'border-neutral-500'}`}>
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-emerald-500 border-emerald-500 text-neutral-950' : 'border-neutral-500'}`}>
                           {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                         </div>
-                        <span>{isChecked ? 'Readied' : 'Mark Ready'}</span>
+                        <span>{isChecked ? 'Done ✓' : 'Mark Done'}</span>
                       </button>
                     </div>
 
@@ -1395,6 +1461,15 @@ ${quote}`;
                 );
               })}
             </div>
+
+            {/* Celebratory Reward Completion Banner with Animation */}
+            {allStepsDone && (
+              <CompletionRewardBanner
+                onClaimReward={handleClaimCompletionReward}
+                completedCount={reviewedSteps.size}
+                totalSteps={mission.steps.length}
+              />
+            )}
 
             {/* Lock Activation Section */}
             <div className="pt-2 space-y-4">
@@ -1782,15 +1857,16 @@ ${quote}`;
                 </div>
               </div>
 
-              {/* Timer Expired Action */}
-              {timerExpired && (
+              {/* Timer Expired or All Steps Completed Action */}
+              {(timerExpired || allStepsDone) && (
                 <div className="pt-2 animate-bounce">
                   <button
-                    onClick={() => setAppState('VALIDATION')}
-                    className="px-8 py-4 sm:py-5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-mono font-bold text-base uppercase tracking-wider transition glow-emerald shadow-2xl flex items-center space-x-2.5 mx-auto"
+                    onClick={handleClaimCompletionReward}
+                    className="px-8 py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-amber-400 hover:from-emerald-400 hover:to-amber-300 text-neutral-950 font-mono font-bold text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 shadow-2xl glow-gold-emerald flex items-center space-x-2.5 mx-auto cursor-pointer"
                   >
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span>I HAVE RETURNED // RECEIVE CLOSING BLESSING</span>
+                    <Trophy className="w-4 h-4 text-neutral-950" />
+                    <span>I HAVE COMPLETED ALL GROUNDING // RECEIVE CLOSING BLESSING</span>
+                    <Sparkles className="w-4 h-4 text-neutral-950" />
                   </button>
                 </div>
               )}
@@ -2012,6 +2088,9 @@ ${quote}`;
         isOpen={showStepPeekModal}
         onClose={() => setShowStepPeekModal(false)}
         onExitToSteps={handleReturnToMission}
+        reviewedSteps={reviewedSteps}
+        onToggleStep={toggleStepReviewed}
+        onClaimReward={handleClaimCompletionReward}
       />
 
       {/* Global Minimalist Footer */}
