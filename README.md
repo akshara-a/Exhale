@@ -3,26 +3,6 @@
 > **Privacy-First, Zero-Retention Mental Health Circuit Breaker.**  
 > An anti-engagement brutalist web application engineered to shatter digital cognitive burnout, lock your screen, and compel you to touch the physical living biosphere.
 
----
-
-> [!IMPORTANT]
-> ### 🏆 Hacktoberfest 2026 Submission Disclaimer & Post-Deadline Hardening
-> **Official Challenge Submission Window Closed:** October 11, 2026.  
-> 
-> *Notice for Hackathon Organizers & Evaluators:* The complete end-to-end functionality of Exhale (15 global planetary nature lineages, zero-retention RAM architecture, 3-tier sovereign AI fallback with Hermes-3/Groq, hyper-local weather anchoring, and multimodal proof-of-touch computer vision) was finalized and submitted prior to the October 11 deadline.
-> 
-> Following the submission deadline, the codebase underwent **targeted security hardening patches and UI/UX usability updates**:
-> - **Squashed & Hardened Security Patch Release:**
->   - **Cooperative Cancellation Tokens:** Integrated `CancellationTokenSource` and client disconnect monitoring in `main.py` & `cancellation.py` to abort server-side inference on client aborts (HTTP 499), preventing runaway GPU token consumption.
->   - **Streaming Memory Exhaustion Protection:** Added 64KB chunked streaming boundaries and strict 15MB payload size caps on `/verify-touch` to protect against server memory exhaustion.
->   - **Zero-Retention Header Hardening:** Injected strict `Cache-Control: no-store, no-cache`, `Pragma: no-cache`, and `X-Zero-Retention` headers across all endpoints.
-> - **UI/UX Usability Updates & Glitch Elimination:**
->   - **Compassionate Circuit Breaker (Pause & Continue):** Upgraded the lock screen behavior. Focus interruption (tab switch / window blur) now compassionately pauses the timer instead of discarding progress via punitive resets. Added in-screen `[ ⏸ Pause ]` and `[ ▶ Continue Grounding ]` controls.
->   - **Bidirectional Stepper Navigation:** Enhanced `StepProgress` so users can seamlessly navigate between Step 1 (Express Strain) and Step 2 (Protocol Steps) without data loss.
->   - **In-Session Protocol Peek Modal (`StepPeekModal`):** Users can reference their 5 outdoor grounding directives without abandoning the silenced lock screen.
->   - **Circuit Breaker Exit Modal (`CircuitBreakerExitModal`):** Provides transparent options to pause and review steps or edit input while showing live remaining time.
->   - **Alignment & Visual Glitch Fixes:** Corrected header pill overflows, anchored telemetry popovers, improved mobile responsive padding, and refined glassmorphic contrast.
-> *(This disclaimer is included for evaluation transparency and will be maintained during the judging review period).*
 
 ---
 
